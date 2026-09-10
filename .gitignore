@@ -12,3 +12,4 @@ dist/
 .claude/
 .claude-flow/
 .superpowers/
+node_modules
