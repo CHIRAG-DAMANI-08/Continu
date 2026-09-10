@@ -1,0 +1,1 @@
+export { PerplexityAdapter } from './universal';

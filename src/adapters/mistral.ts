@@ -1,0 +1,1 @@
+export { MistralAdapter } from './universal';

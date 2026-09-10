@@ -1,0 +1,14 @@
+# .gitignore
+node_modules/
+.output/
+.wxt/
+dist/
+*.log
+.DS_Store
+.env.local
+.env
+*.local
+*.zip
+.claude/
+.claude-flow/
+.superpowers/
