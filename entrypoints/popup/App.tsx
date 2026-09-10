@@ -178,12 +178,7 @@ function App() {
       }
 
       if (!draftText.trim()) {
-        showStatus('info', 'No prompt draft found in active tab. You can paste or type a prompt below to cook it.');
-        setCookedModal({
-          original: '',
-          cooked: '',
-          provider: aiProvider || 'AI',
-        });
+        showStatus('info', 'No prompt draft found in active tab. Type a prompt in the chatbox first to cook it.');
         return;
       }
 

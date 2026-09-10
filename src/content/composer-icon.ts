@@ -5,7 +5,7 @@ import { formatContext, formatPromptWithContext, type DropFormat } from '../cont
 import { generateContext, generateMinimalContext } from '../contexts/generate';
 import { saveContextLocal, getContextsLocal } from '../contexts/storage';
 import { extractPageChatTitle, dropContextToChat, triggerSubmit } from '../adapters/utils';
-import { cookPrompt, isAiConfigured } from '../ai/cook';
+import { cookPrompt, isAiConfigured, isRefusalResponse } from '../ai/cook';
 import { logger, redactSensitiveData } from '../utils/logger';
 
 const DEFAULT_ICON_SIZE = 28;
@@ -25,6 +25,8 @@ export class ComposerIcon {
   private badgeHost: HTMLElement | null = null;
   private badgeShadow: ShadowRoot | null = null;
   private armedContext: ContinuContext | null = null;
+  private armedOutlineHost: HTMLElement | null = null;
+  private armedOutlineShadow: ShadowRoot | null = null;
   private dropzoneHost: HTMLElement | null = null;
   private dropzoneShadow: ShadowRoot | null = null;
   private isDropzoneVisible = false;
@@ -228,6 +230,13 @@ export class ComposerIcon {
       const overlay = this.dropzoneShadow.querySelector('.continu-dropzone-overlay');
       overlay?.classList.toggle('theme-light', isLight);
     }
+    if (this.armedOutlineHost) {
+      this.armedOutlineHost.classList.toggle('theme-light', isLight);
+    }
+    if (this.armedOutlineShadow) {
+      const outline = this.armedOutlineShadow.querySelector('.continu-armed-outline');
+      outline?.classList.toggle('theme-light', isLight);
+    }
     if (this.isOpen) {
       this.renderPanel();
     }
@@ -276,6 +285,9 @@ export class ComposerIcon {
     this.badgeHost?.remove();
     this.badgeHost = null;
     this.badgeShadow = null;
+    this.armedOutlineHost?.remove();
+    this.armedOutlineHost = null;
+    this.armedOutlineShadow = null;
     this.disarmContext();
   }
 
@@ -736,13 +748,32 @@ export class ComposerIcon {
 
     // Position armed badge if active
     if (this.badgeHost && this.armedContext) {
-      const badgeTop = chatboxRect.top - 38;
-      const badgeLeft = chatboxRect.left + 8;
-      this.badgeHost.style.top = `${Math.max(6, Math.round(badgeTop))}px`;
+      const badgeTop = chatboxRect.top - 16;
+      const badgeLeft = chatboxRect.left + 14;
+      this.badgeHost.style.top = `${Math.max(4, Math.round(badgeTop))}px`;
       this.badgeHost.style.left = `${Math.round(badgeLeft)}px`;
       this.badgeHost.style.display = 'block';
     } else if (this.badgeHost) {
       this.badgeHost.style.display = 'none';
+    }
+
+    // Position armed outline around chatbox if active (like Image 2)
+    if (this.armedOutlineHost && this.armedContext) {
+      this.armedOutlineHost.style.top = `${Math.round(chatboxRect.top)}px`;
+      this.armedOutlineHost.style.left = `${Math.round(chatboxRect.left)}px`;
+      this.armedOutlineHost.style.width = `${Math.round(chatboxRect.width)}px`;
+      this.armedOutlineHost.style.height = `${Math.round(chatboxRect.height)}px`;
+      const computed = window.getComputedStyle(chatbox);
+      const radius = computed.borderRadius && computed.borderRadius !== '0px' ? computed.borderRadius : '16px';
+      if (this.armedOutlineShadow) {
+        const outlineEl = this.armedOutlineShadow.querySelector('.continu-armed-outline') as HTMLElement;
+        if (outlineEl) {
+          outlineEl.style.borderRadius = radius;
+        }
+      }
+      this.armedOutlineHost.style.display = 'block';
+    } else if (this.armedOutlineHost) {
+      this.armedOutlineHost.style.display = 'none';
     }
 
     // Adjust panel position if open
@@ -753,6 +784,7 @@ export class ComposerIcon {
 
   /**
    * Sets up HTML5 Drag-and-Drop detection on the chatbox to allow dropping contexts to arm.
+   * Keeps the textbox 100% visible and unobstructed with zero overlay covering the input.
    */
   private setupDragAndDrop(): void {
     if (!this.dropzoneHost || !document.body.contains(this.dropzoneHost)) {
@@ -772,26 +804,22 @@ export class ComposerIcon {
 
       const overlay = document.createElement('div');
       overlay.className = 'continu-dropzone-overlay' + (this.currentTheme === 'light' ? ' theme-light' : '');
-      overlay.innerHTML = `
-        <div class="dropzone-box">
-          <svg class="dropzone-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-          </svg>
-          <span class="dropzone-title">Drop to attach context</span>
-        </div>
-      `;
       this.dropzoneShadow.appendChild(overlay);
       document.body.appendChild(this.dropzoneHost);
     }
 
     this.boundDragEnter = (e: DragEvent) => {
       if (this.hasContextData(e)) {
+        e.preventDefault();
+        e.stopPropagation();
         this.checkDragTarget(e);
       }
     };
 
     this.boundDragOver = (e: DragEvent) => {
       if (this.hasContextData(e)) {
+        e.preventDefault();
+        e.stopPropagation();
         this.checkDragTarget(e);
       }
     };
@@ -848,10 +876,7 @@ export class ComposerIcon {
 
   private hasContextData(e: DragEvent): boolean {
     if (!e.dataTransfer) return false;
-    return (
-      e.dataTransfer.types.includes('application/x-continu-context') ||
-      e.dataTransfer.types.includes('text/plain')
-    );
+    return e.dataTransfer.types.includes('application/x-continu-context');
   }
 
   private isOverChatbox(e: DragEvent): boolean {
@@ -892,8 +917,14 @@ export class ComposerIcon {
     this.isDropzoneVisible = true;
 
     if (this.dropzoneShadow) {
-      const overlay = this.dropzoneShadow.querySelector('.continu-dropzone-overlay');
-      overlay?.classList.toggle('theme-light', this.currentTheme === 'light');
+      const overlay = this.dropzoneShadow.querySelector('.continu-dropzone-overlay') as HTMLElement;
+      if (overlay) {
+        overlay.classList.toggle('theme-light', this.currentTheme === 'light');
+        const computed = window.getComputedStyle(chatbox);
+        if (computed.borderRadius && computed.borderRadius !== '0px') {
+          overlay.style.borderRadius = computed.borderRadius;
+        }
+      }
     }
   }
 
@@ -910,7 +941,7 @@ export class ComposerIcon {
         width: 100%;
         height: 100%;
         box-sizing: border-box;
-        border-radius: 12px;
+        border-radius: 16px;
         background: transparent !important;
         backdrop-filter: none !important;
         border: 2px dashed #3b82f6;
@@ -936,59 +967,18 @@ export class ComposerIcon {
           box-shadow: 0 0 16px rgba(59, 130, 246, 0.45), inset 0 0 10px rgba(59, 130, 246, 0.12);
         }
       }
-
-      .dropzone-box {
-        position: absolute;
-        top: -14px;
-        left: 50%;
-        transform: translateX(-50%);
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: #18181c;
-        border: 1px solid #3b82f6;
-        padding: 3px 12px;
-        border-radius: 20px;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(59, 130, 246, 0.25);
-        pointer-events: none;
-        white-space: nowrap;
-        color: #f4f4f5;
-      }
-
-      .continu-dropzone-overlay.theme-light .dropzone-box,
-      :host(.theme-light) .dropzone-box {
-        background: #ffffff;
-        border: 1px solid #2563eb;
-        color: #0f172a;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(37, 99, 235, 0.2);
-      }
-
-      .dropzone-icon {
-        color: #60a5fa;
-        flex-shrink: 0;
-      }
-
-      .continu-dropzone-overlay.theme-light .dropzone-icon,
-      :host(.theme-light) .dropzone-icon {
-        color: #2563eb;
-      }
-
-      .dropzone-title {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.2px;
-      }
     `;
   }
 
   /**
    * Arms a context to be bundled with the user's next prompt (COA 1).
-   * Renders the floating context badge above the chatbox and attaches submission interceptors.
+   * Renders the floating context badge above the chatbox, renders the glowing outline around
+   * the chatbox container (Image 2), and attaches submission interceptors.
    */
   armContext(context: ContinuContext): void {
     this.armedContext = context;
     this.renderArmedBadge();
+    this.renderArmedOutline();
     this.attachSubmissionInterception();
     this.updatePosition();
 
@@ -1000,7 +990,7 @@ export class ComposerIcon {
   }
 
   /**
-   * Disarms the active context, removing the badge and detaching interceptors.
+   * Disarms the active context, removing the badge, outline, and detaching interceptors.
    */
   disarmContext(): void {
     this.armedContext = null;
@@ -1011,6 +1001,9 @@ export class ComposerIcon {
     if (this.badgeShadow) {
       const badge = this.badgeShadow.querySelector('.continu-armed-badge');
       badge?.remove();
+    }
+    if (this.armedOutlineHost) {
+      this.armedOutlineHost.style.display = 'none';
     }
   }
 
@@ -1047,6 +1040,72 @@ export class ComposerIcon {
     if (this.badgeHost) {
       this.badgeHost.style.display = 'block';
     }
+  }
+
+  /**
+   * Renders or shows the sleek outline wrapper around the chatbox card when armed (matching Image 2).
+   */
+  private renderArmedOutline(): void {
+    if (!this.armedOutlineHost || !document.body.contains(this.armedOutlineHost)) {
+      this.armedOutlineHost?.remove();
+      this.armedOutlineHost = document.createElement('div');
+      this.armedOutlineHost.id = 'continu-armed-outline-host';
+      if (this.currentTheme === 'light') {
+        this.armedOutlineHost.classList.add('theme-light');
+      }
+      this.armedOutlineHost.style.cssText = `
+        position: fixed;
+        z-index: 2147483644;
+        pointer-events: none;
+        display: none;
+      `;
+      this.armedOutlineShadow = this.armedOutlineHost.attachShadow({ mode: 'closed' });
+      const style = document.createElement('style');
+      style.textContent = this.getArmedOutlineStyles();
+      this.armedOutlineShadow.appendChild(style);
+
+      const outline = document.createElement('div');
+      outline.className = 'continu-armed-outline' + (this.currentTheme === 'light' ? ' theme-light' : '');
+      this.armedOutlineShadow.appendChild(outline);
+      document.body.appendChild(this.armedOutlineHost);
+    }
+  }
+
+  private getArmedOutlineStyles(): string {
+    return `
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      .continu-armed-outline {
+        position: absolute;
+        inset: 0;
+        box-sizing: border-box;
+        pointer-events: none;
+        border: 1.5px solid #3b82f6;
+        box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4), 0 0 16px rgba(59, 130, 246, 0.2);
+        border-radius: 16px;
+        transition: border-color 150ms ease, box-shadow 150ms ease;
+        animation: armedGlowPulse 2.5s ease-in-out infinite alternate;
+      }
+
+      .continu-armed-outline.theme-light,
+      :host(.theme-light) .continu-armed-outline {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35), 0 0 14px rgba(37, 99, 235, 0.16);
+      }
+
+      @keyframes armedGlowPulse {
+        0% {
+          box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35), 0 0 12px rgba(59, 130, 246, 0.15);
+        }
+        100% {
+          box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.55), 0 0 20px rgba(59, 130, 246, 0.3);
+        }
+      }
+    `;
   }
 
   private attachSubmissionInterception(): void {
@@ -1438,8 +1497,10 @@ export class ComposerIcon {
 
       item.addEventListener('dragstart', (e) => {
         if (!e.dataTransfer) return;
+        // Crucial: Only attach application/x-continu-context. Never attach text/plain!
+        // Attaching text/plain triggers native chat web app drop overlays (like ChatGPT's "Drop text here.")
+        // which completely covers and obstructs the user's textbox.
         e.dataTransfer.setData('application/x-continu-context', JSON.stringify(ctx));
-        e.dataTransfer.setData('text/plain', formatPromptWithContext(ctx, ''));
         e.dataTransfer.effectAllowed = 'copy';
         item.classList.add('is-dragging');
       });
@@ -1697,7 +1758,7 @@ export class ComposerIcon {
 
     try {
       const result = await cookPrompt(draftText);
-      if (result.success && result.cookedPrompt) {
+      if (result.success && result.cookedPrompt && !isRefusalResponse(result.cookedPrompt)) {
         btn.classList.remove('loading', 'disabled');
         btn.innerHTML = originalContent;
         this.renderCookPreview(draftText, result.cookedPrompt, result.provider || this.aiProvider || 'AI', result.model || this.aiModel || '');

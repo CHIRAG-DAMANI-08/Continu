@@ -254,6 +254,97 @@ describe('AI Cook Module', () => {
       expect(res.error).toBe('TIMEOUT');
       expect(res.setupInfo).toContain('timed out');
     });
+
+    it('rejects AI refusal responses and returns COOK_FAILED error', async () => {
+      vi.spyOn(storage, 'getAISettings').mockResolvedValue({
+        providers: {
+          openai: {
+            provider: 'openai',
+            apiKey: 'sk-mock-key',
+            model: 'gpt-4o-mini',
+          },
+        },
+        activeProvider: 'openai',
+      });
+
+      const refusalText = 'Please provide a draft prompt to optimize. Your input "how do i get around thse?" is a question, not a prompt.';
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: refusalText } }],
+          }),
+        })
+      );
+
+      const res = await cookPrompt('how do i get around thse?');
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('COOK_FAILED');
+      expect(res.setupInfo).toContain('Could not optimize this input into an actionable prompt');
+    });
+
+    it('wraps input in formatCookingUserMessage before sending to provider', async () => {
+      vi.spyOn(storage, 'getAISettings').mockResolvedValue({
+        providers: {
+          openai: {
+            provider: 'openai',
+            apiKey: 'sk-mock-key',
+            model: 'gpt-4o-mini',
+          },
+        },
+        activeProvider: 'openai',
+      });
+
+      let sentBody: any = null;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(async (_url: string, opts: any) => {
+          sentBody = JSON.parse(opts.body);
+          return {
+            ok: true,
+            json: async () => ({
+              choices: [{ message: { content: 'Implement a complete authentication flow with refresh tokens.' } }],
+            }),
+          };
+        })
+      );
+
+      const res = await cookPrompt('auth');
+      expect(res.success).toBe(true);
+      expect(sentBody).not.toBeNull();
+      const userMessage = sentBody.messages.find((m: any) => m.role === 'user');
+      expect(userMessage.content).toContain('RAW INPUT TO TRANSFORM INTO AN OPTIMIZED PROMPT:');
+      expect(userMessage.content).toContain('auth');
+    });
+  });
+
+  describe('isRefusalResponse', () => {
+    it('detects common AI refusal phrases', async () => {
+      const { isRefusalResponse } = await import('./cook');
+      expect(isRefusalResponse('Please provide a draft prompt to optimize.')).toBe(true);
+      expect(isRefusalResponse('Your input "how do i get around thse?" is a question, not a prompt.')).toBe(true);
+      expect(isRefusalResponse('This is not a prompt to optimize.')).toBe(true);
+      expect(isRefusalResponse('As an AI language model, I cannot optimize this.')).toBe(true);
+      expect(isRefusalResponse('')).toBe(true);
+    });
+
+    it('returns false for valid optimized prompts', async () => {
+      const { isRefusalResponse } = await import('./cook');
+      expect(isRefusalResponse('Implement a robust caching layer with Redis.')).toBe(false);
+      expect(isRefusalResponse('Identify the architectural bottlenecks in this query and provide workarounds.')).toBe(false);
+    });
+  });
+
+  describe('formatCookingUserMessage', () => {
+    it('wraps single words, questions, and long drafts with optimization directives', async () => {
+      const { formatCookingUserMessage } = await import('./cook');
+      const msg = formatCookingUserMessage('how do i get around thse?');
+      expect(msg).toContain('how do i get around thse?');
+      expect(msg).toContain('single word');
+      expect(msg).toContain('short sentence, question, or phrase');
+      expect(msg).toContain('compress and optimize to save tokens');
+    });
   });
 
   describe('calculateCookTimeout', () => {

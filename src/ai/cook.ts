@@ -13,15 +13,73 @@ export interface CookPromptResult {
   setupInfo?: string;
 }
 
-export const COOK_SYSTEM_PROMPT = `You are a high-speed prompt optimizer that transforms drafts into clear, punchy, effective prompts.
+export const COOK_SYSTEM_PROMPT = `You are an expert AI prompt engineer and token optimizer.
+Your objective is to transform any user input (a single word, a question, a short sentence, or a long draft) into a high-density, ready-to-use prompt for an AI assistant.
+
+TRANSFORMATION RULES BASED ON INPUT LENGTH & FORM:
+1. SINGLE WORD (e.g. "auth", "react", "summarize", "docker"):
+   - Expand into a crisp, actionable SINGLE-LINE prompt directing an AI to execute or implement that task clearly.
+   - Example input: "auth" -> Example prompt: "Implement a secure authentication system with JWT tokens, refresh tokens, and robust error handling."
+2. SINGLE SENTENCE, QUESTION, OR SHORT PHRASE (e.g. "how do i get around thse?", "make a snake game", "why is my query slow"):
+   - Expand into a comprehensive, high-density PROMPT PARAGRAPH.
+   - Convert questions or casual requests into explicit, authoritative instructions that direct an AI to provide concrete solutions, root causes, workaround architectures, and code snippets.
+   - Example input: "how do i get around thse?" -> Example prompt: "Identify the primary bottlenecks, constraints, or blockers causing this issue and provide concrete step-by-step workarounds, alternative implementation patterns, and code examples to resolve them."
+3. LARGE OR VERBOSE PROMPT:
+   - Aggressively optimize to SAVE TOKENS.
+   - Remove conversational filler, pleasantries ("could you please", "I was wondering if"), preamble, and repetition.
+   - Retain 100% of the original requirements, technical constraints, context, and expected output format using high semantic density.
+4. UNIVERSAL TOKEN OPTIMIZATION:
+   - All generated prompts must be token-efficient: fewer words, maximum information density, zero fluff.
+
+STRICT REFUSAL RULES:
+- NEVER refuse an input. NEVER say "Please provide a draft prompt", "This is a question, not a prompt", or "I cannot assist with this".
+- Treat every input—no matter how short or informal—as the raw seed topic to construct an optimized prompt.
 
 CRITICAL FORMATTING RULES:
 1. OUTPUT PLAIN TEXT ONLY.
 2. NEVER use markdown bold or italic syntax. Absolutely NO double asterisks (NEVER write **text** or **word**). NO single asterisks (*text*), and NO underscores (__text__).
 3. NEVER wrap sentences, sections, or the prompt in quotation marks ("" or '').
-4. Do NOT use markdown headings (#, ##, ###). If organizing into parts, use plain capitalized labels without formatting (e.g. GOAL:, CONTEXT:, REQUIREMENTS:, INSTRUCTIONS:).
-5. Fast, concise, and direct: Cut all fluff, preamble, and boilerplate. Refine the prompt to be actionable without unnecessary length.
-6. Return ONLY the final improved plain text prompt. No intro ("Here is..."), no commentary, and no markdown code fences.`;
+4. Do NOT use markdown headings (#, ##, ###). If organizing into parts, use plain capitalized labels without formatting (e.g. GOAL:, CONTEXT:, REQUIREMENTS:).
+5. Return ONLY the final improved plain text prompt. No intro ("Here is..."), no commentary, and no markdown code fences.`;
+
+/**
+ * Wraps user draft prompt with clear context instructions to guarantee the model
+ * optimizes single words, questions, and long drafts without refusing.
+ */
+export function formatCookingUserMessage(rawPrompt: string): string {
+  const trimmed = rawPrompt.trim();
+  return `RAW INPUT TO TRANSFORM INTO AN OPTIMIZED PROMPT:
+"""
+${trimmed}
+"""
+
+Instructions:
+- If this is a single word: produce a crisp, actionable single-line prompt.
+- If this is a short sentence, question, or phrase: produce a structured, high-density prompt paragraph for an AI.
+- If this is a long prompt: compress and optimize to save tokens while keeping all requirements and context.
+- All outputs must be token-efficient (fewer words, high semantic density).
+- Return ONLY the improved plain-text prompt. No bold asterisks, no quotes, no conversational filler. Never refuse.`;
+}
+
+/**
+ * Detects if the model mistakenly returned a refusal message instead of a prompt.
+ */
+export function isRefusalResponse(text: string): boolean {
+  if (!text) return true;
+  const lower = text.toLowerCase();
+  const refusalPatterns = [
+    'please provide a draft prompt',
+    'is a question, not a prompt',
+    'is a question and not a prompt',
+    'not a prompt to optimize',
+    'not a prompt that can be optimized',
+    'as an ai language model',
+    'i cannot optimize this',
+    'please provide a prompt',
+    'provide more context to optimize',
+  ];
+  return refusalPatterns.some((pattern) => lower.includes(pattern));
+}
 
 /**
  * Post-processes and sanitizes cooked prompt output:
@@ -155,6 +213,7 @@ export async function cookPrompt(rawPrompt: string): Promise<CookPromptResult> {
   const timeoutSec = Math.round(timeoutMs / 1000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const userMessageContent = formatCookingUserMessage(trimmed);
 
   try {
     let cooked = '';
@@ -187,7 +246,7 @@ export async function cookPrompt(rawPrompt: string): Promise<CookPromptResult> {
             model: config.model || (config.provider === 'groq' ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini'),
             messages: [
               { role: 'system', content: COOK_SYSTEM_PROMPT },
-              { role: 'user', content: trimmed },
+              { role: 'user', content: userMessageContent },
             ],
             temperature: 0.2,
             max_tokens: 1200,
@@ -220,7 +279,7 @@ export async function cookPrompt(rawPrompt: string): Promise<CookPromptResult> {
             max_tokens: 1200,
             temperature: 0.2,
             system: COOK_SYSTEM_PROMPT,
-            messages: [{ role: 'user', content: trimmed }],
+            messages: [{ role: 'user', content: userMessageContent }],
           }),
           signal: controller.signal,
         });
@@ -249,7 +308,7 @@ export async function cookPrompt(rawPrompt: string): Promise<CookPromptResult> {
           contents: [
             {
               role: 'user',
-              parts: [{ text: trimmed }],
+              parts: [{ text: userMessageContent }],
             },
           ],
           generationConfig: {
@@ -302,8 +361,12 @@ export async function cookPrompt(rawPrompt: string): Promise<CookPromptResult> {
 
     cooked = cleanCookedPrompt(cooked);
 
-    if (!cooked) {
-      throw new Error('AI provider returned empty response');
+    if (!cooked || isRefusalResponse(cooked)) {
+      return {
+        success: false,
+        error: 'COOK_FAILED',
+        setupInfo: 'Could not optimize this input into an actionable prompt. Please try rephrasing.',
+      };
     }
 
     // Record successful cooking attempt for rate limiting

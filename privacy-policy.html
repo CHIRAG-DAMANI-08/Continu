@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - Continu</title>
+  <style>
+    :root {
+      --bg: #0c0d0e;
+      --card-bg: #141518;
+      --border: #23252a;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --accent: #60a5fa;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      margin: 0;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 40px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    }
+    h1 {
+      color: #ffffff;
+      font-size: 28px;
+      margin-top: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    h2 {
+      color: #ffffff;
+      font-size: 18px;
+      margin-top: 32px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    p, li {
+      color: var(--text-muted);
+      font-size: 14.5px;
+    }
+    strong {
+      color: #f1f5f9;
+    }
+    code {
+      background: #1e2025;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+    ul {
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .callout {
+      background: rgba(59, 130, 246, 0.08);
+      border-left: 4px solid var(--primary);
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      margin: 20px 0;
+    }
+    .callout p {
+      margin: 0;
+      color: var(--text);
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="badge">Privacy-First Architecture</div>
+    <h1>Continu Privacy Policy</h1>
+    <p><strong>Effective Date:</strong> September 10, 2026</p>
+
+    <div class="callout">
+      <p><strong>Core Promise:</strong> Continu does not track you, does not log your browsing habits, does not inject advertisements, and never sells user data. All conversation contexts are protected by client-side End-to-End Encryption (AES-256-GCM).</p>
+    </div>
+
+    <h2>1. Single Purpose Overview</h2>
+    <p>Continu is a universal cross-platform AI context manager and prompt optimizer. Its sole purpose is to allow users to capture conversation contexts, store them locally, optionally synchronize them across their devices, and insert or arm contexts when interacting with web-based AI chat assistants.</p>
+
+    <h2>2. Data Collection and Usage</h2>
+    <ul>
+      <li><strong>Conversation Contexts:</strong> When you click "Extract & Save" or drop contexts, Continu generates structured summaries (e.g., goals, decisions, constraints). This data is stored locally in your browser using <code>chrome.storage.local</code>.</li>
+      <li><strong>Zero Plaintext Cloud Access:</strong> If you sign in to sync contexts across devices, your contexts are encrypted locally on your device using <strong>AES-256-GCM</strong> with PBKDF2 key derivation before being transmitted to our secure cloud database (Supabase). The encryption key is derived on your device; our servers receive only ciphertext and cannot read your conversations.</li>
+      <li><strong>User Authentication:</strong> We support optional sign-in via Google OAuth (using Chrome's secure <code>identity.launchWebAuthFlow</code>). We receive your public user ID and email address solely to associate your encrypted vault with your account.</li>
+      <li><strong>AI Provider API Keys:</strong> If you configure an AI API key for prompt cooking (e.g., OpenAI, Claude, Gemini, Groq, or OpenRouter), your API key is stored strictly on your local device in <code>chrome.storage.local</code>. API calls are sent directly from your browser to the designated AI provider's official API endpoint over HTTPS. Your API keys are never sent to our servers.</li>
+      <li><strong>Zero Tracking & Zero Telemetry:</strong> We do not use third-party analytics, behavioral tracking cookies, or advertising SDKs.</li>
+    </ul>
+
+    <h2>3. Chrome Extension Permissions Justification</h2>
+    <p>Continu requests only the minimum permissions required to perform its functions:</p>
+    <ul>
+      <li><code>storage</code> & <code>unlimitedStorage</code>: Used to store your saved contexts, themes, and configuration locally on your machine.</li>
+      <li><code>activeTab</code>: Used to detect the active AI chat composer, read conversation turns on demand when requested by the user, and insert prompts into the composer.</li>
+      <li><code>tabs</code>: Used to identify page titles and URL transitions on AI chat web applications to properly name saved contexts.</li>
+      <li><code>identity</code>: Used to securely handle Google OAuth sign-in without embedding web login credentials.</li>
+      <li><code>host_permissions</code> (<code>&lt;all_urls&gt;</code> & <code>https://*.supabase.co/*</code>): Required to communicate with your Supabase database for encrypted backup and to support universal AI chat applications across all domains (including major providers like ChatGPT, Claude, Gemini, Perplexity, DeepSeek, and custom or self-hosted AI chat apps such as Open WebUI, Ollama, and LibreChat).</li>
+    </ul>
+
+    <h2>4. Data Retention and Deletion</h2>
+    <p>You have complete control over your data:</p>
+    <ul>
+      <li><strong>Local Deletion:</strong> You can delete any saved context at any time by clicking "Delete" in the extension interface or by clearing extension storage.</li>
+      <li><strong>Cloud Deletion:</strong> Deleting a context locally immediately propagates the deletion to the cloud database.</li>
+      <li><strong>Account Deletion:</strong> Signing out or requesting account deletion removes your encryption vault and associated records permanently.</li>
+    </ul>
+
+    <h2>5. Third-Party Services</h2>
+    <ul>
+      <li><strong>Supabase:</strong> Cloud database infrastructure for storing encrypted ciphertext. Protected by Row-Level Security (RLS).</li>
+      <li><strong>AI Model Providers (User-Configured):</strong> When using prompt cooking, your prompt text is processed according to the privacy policy of the specific provider you chose (e.g., OpenAI, Anthropic, Google, Groq, OpenRouter).</li>
+    </ul>
+
+    <h2>6. Contact Us</h2>
+    <p>If you have any questions or security inquiries regarding this policy, please contact:</p>
+    <p><strong>Developer:</strong> Chirag Damani<br>
+    <strong>Email:</strong> <a href="mailto:damanichiru38@gmail.com">damanichiru38@gmail.com</a><br>
+    <strong>Project Repository:</strong> <a href="https://github.com/CHIRAG-DAMANI-08/Continu" target="_blank" rel="noopener">github.com/CHIRAG-DAMANI-08/Continu</a></p>
+
+    <div class="footer">
+      &copy; 2026 Continu. All rights reserved. Built with end-to-end client encryption.
+    </div>
+  </div>
+</body>
+</html>

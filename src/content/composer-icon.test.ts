@@ -6,7 +6,10 @@ import type { AIAdapter } from '../adapters/base';
 // Mock chrome runtime and storage
 vi.stubGlobal('chrome', {
   runtime: {
-    sendMessage: vi.fn().mockResolvedValue({ success: true, contexts: [] }),
+    sendMessage: vi.fn().mockImplementation((msg: any) => {
+      if (msg?.type === 'CHECK_AUTH') return Promise.resolve({ authenticated: true });
+      return Promise.resolve({ success: true, contexts: [] });
+    }),
     onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
   },
   storage: {
@@ -51,6 +54,9 @@ describe('ComposerIcon Toolbar Clustering & Placement', () => {
   afterEach(() => {
     container.remove();
     document.getElementById('continu-composer-host')?.remove();
+    document.getElementById('continu-armed-badge-host')?.remove();
+    document.getElementById('continu-armed-outline-host')?.remove();
+    document.getElementById('continu-dropzone-host')?.remove();
     vi.clearAllMocks();
   });
 
@@ -620,9 +626,8 @@ describe('ComposerIcon Toolbar Clustering & Placement', () => {
     expect(dropzoneStyles).toContain('background: transparent !important');
     expect(dropzoneStyles).toContain('backdrop-filter: none !important');
     expect(dropzoneStyles).toContain('border: 2px dashed #3b82f6');
-    // Top-docked pill that does not sit in center of textarea
-    expect(dropzoneStyles).toContain('position: absolute');
-    expect(dropzoneStyles).toContain('top: -14px');
+    // Dropzone overlay has no blocking text box, keeping textbox 100% visible
+    expect(dropzoneStyles).not.toContain('.dropzone-box');
 
     iconManager.destroy();
   });
@@ -939,6 +944,199 @@ describe('ComposerIcon Toolbar Clustering & Placement', () => {
     // Verify preview is removed and panel is closed
     expect(panel.querySelector('.cook-preview-overlay')).toBeNull();
     expect((iconManager as any).isOpen).toBe(false);
+
+    iconManager.destroy();
+  });
+
+  it('does NOT open cook preview modal on cooking refusal or failure, displays error state on button', async () => {
+    container.innerHTML = `
+      <form class="chatbox-card">
+        <textarea id="prompt-textarea">how do i get around thse?</textarea>
+        <button class="btn-send" type="submit">Send</button>
+      </form>
+    `;
+    const form = container.querySelector('form')!;
+    const composer = container.querySelector('#prompt-textarea') as HTMLTextAreaElement;
+
+    mockRect(form, { top: 500, left: 100, width: 800, height: 100 });
+    mockRect(composer, { top: 510, left: 110, width: 780, height: 40 });
+
+    const adapter: AIAdapter = {
+      name: 'chatgpt',
+      detect: () => true,
+      findComposer: () => composer,
+      findSubmitButton: () => null,
+      findAttachButton: () => null,
+      getComposerText: () => composer.value,
+      extractConversation: () => [],
+      insertText: vi.fn(),
+      submit: () => {},
+    };
+
+    const storage = await import('../ai/storage');
+    vi.spyOn(storage, 'getAISettings').mockResolvedValue({
+      providers: {
+        openai: {
+          provider: 'openai',
+          apiKey: 'sk-mock-key',
+          model: 'gpt-4o-mini',
+        },
+      },
+      activeProvider: 'openai',
+    });
+
+    // Mock provider returning refusal text
+    const refusalText = 'Please provide a draft prompt to optimize. Your input "how do i get around thse?" is a question, not a prompt.';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: refusalText } }],
+      }),
+    }));
+
+    const iconManager = new ComposerIcon(adapter);
+    iconManager.init();
+
+    await (iconManager as any).openPanel();
+    const panel = (iconManager as any).panel as HTMLElement;
+    const cookBtn = panel.querySelector('.panel-btn-cook') as HTMLButtonElement;
+    expect(cookBtn).not.toBeNull();
+
+    // Click cook button
+    await (iconManager as any).handleCookPrompt(cookBtn);
+
+    // Verify modal overlay is NOT opened
+    const preview = panel.querySelector('.cook-preview-overlay');
+    expect(preview).toBeNull();
+
+    // Verify button shows error state
+    expect(cookBtn.classList.contains('error')).toBe(true);
+    expect(cookBtn.textContent).toContain('Cooking Failed');
+
+    iconManager.destroy();
+  });
+
+  it('renders armed outline around chatbox and positions armed badge at top-left when armed, removes on disarm', () => {
+    container.innerHTML = `
+      <form class="chatbox-card">
+        <textarea id="prompt-textarea"></textarea>
+        <button class="btn-send" type="submit">Send</button>
+      </form>
+    `;
+    const form = container.querySelector('form')!;
+    const composer = container.querySelector('#prompt-textarea') as HTMLTextAreaElement;
+
+    mockRect(form, { top: 500, left: 100, width: 800, height: 100 });
+    mockRect(composer, { top: 510, left: 110, width: 780, height: 40 });
+
+    const adapter: AIAdapter = {
+      name: 'chatgpt',
+      detect: () => true,
+      findComposer: () => composer,
+      findSubmitButton: () => null,
+      findAttachButton: () => null,
+      extractConversation: () => [],
+      insertText: () => {},
+      submit: () => {},
+    };
+
+    const iconManager = new ComposerIcon(adapter);
+    iconManager.init();
+
+    const sampleContext = {
+      id: 'ctx-outline-1',
+      name: 'Build Portable Signal Booster',
+      objective: 'Outline test',
+      source: { url: 'https://chatgpt.com', title: 'Test', platform: 'chatgpt' },
+      decisions: [],
+      createdAt: '2026-09-08T12:00:00Z',
+      conversation: [],
+    };
+
+    // Arm context
+    iconManager.armContext(sampleContext as any);
+
+    const outlineHost = document.getElementById('continu-armed-outline-host');
+    const badgeHost = document.getElementById('continu-armed-badge-host');
+
+    expect(outlineHost).not.toBeNull();
+    expect(badgeHost).not.toBeNull();
+    expect(outlineHost?.style.display).toBe('block');
+    expect(badgeHost?.style.display).toBe('block');
+
+    // Outline should match chatbox rect
+    expect(outlineHost?.style.top).toBe('500px');
+    expect(outlineHost?.style.left).toBe('100px');
+    expect(outlineHost?.style.width).toBe('800px');
+    expect(outlineHost?.style.height).toBe('100px');
+
+    // Disarm context
+    iconManager.disarmContext();
+    expect(outlineHost?.style.display).toBe('none');
+    expect(badgeHost?.style.display).toBe('none');
+
+    iconManager.destroy();
+  });
+
+  it('does not attach text/plain to dataTransfer during context item drag to prevent native drop overlays', async () => {
+    container.innerHTML = `
+      <form class="chatbox-card">
+        <textarea id="prompt-textarea"></textarea>
+      </form>
+    `;
+    const form = container.querySelector('form')!;
+    const composer = container.querySelector('#prompt-textarea') as HTMLTextAreaElement;
+
+    mockRect(form, { top: 500, left: 100, width: 800, height: 100 });
+    mockRect(composer, { top: 510, left: 110, width: 780, height: 40 });
+
+    const adapter: AIAdapter = {
+      name: 'chatgpt',
+      detect: () => true,
+      findComposer: () => composer,
+      findSubmitButton: () => null,
+      findAttachButton: () => null,
+      extractConversation: () => [],
+      insertText: () => {},
+      submit: () => {},
+    };
+
+    const testContexts = [
+      {
+        id: 'ctx-dnd-safe',
+        name: 'Safe Drag Context',
+        objective: 'Test',
+        source: { platform: 'chatgpt', url: '', title: '' },
+        decisions: [],
+        createdAt: '2026-09-08T12:00:00Z',
+        conversation: [],
+      },
+    ];
+
+    const iconManager = new ComposerIcon(adapter);
+    vi.spyOn(iconManager as any, 'isUserAuthenticated').mockResolvedValue(true);
+    vi.spyOn(iconManager as any, 'loadContexts').mockResolvedValue(testContexts);
+
+    iconManager.init();
+    await (iconManager as any).openPanel();
+
+    const panel = (iconManager as any).panel as HTMLElement;
+    const draggableItem = panel.querySelector('.draggable-item') as HTMLElement;
+    expect(draggableItem).not.toBeNull();
+
+    const setDataSpy = vi.fn();
+    const dragEvent = new Event('dragstart', { bubbles: true, cancelable: true }) as any;
+    dragEvent.dataTransfer = {
+      setData: setDataSpy,
+      effectAllowed: '',
+    };
+
+    draggableItem.dispatchEvent(dragEvent);
+
+    // application/x-continu-context must be set
+    expect(setDataSpy).toHaveBeenCalledWith('application/x-continu-context', expect.any(String));
+    // text/plain must NOT be set (prevents ChatGPT "Drop text here" overlay)
+    expect(setDataSpy).not.toHaveBeenCalledWith('text/plain', expect.any(String));
 
     iconManager.destroy();
   });
