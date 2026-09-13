@@ -108,9 +108,8 @@ export function AuthGate({ children }: AuthGateProps) {
         if (preflight.status === 400) {
           const errBody = await preflight.json().catch(() => null);
           if (errBody?.msg?.includes('provider is not enabled') || errBody?.error_code === 'validation_failed') {
-            setError(
-              'Google sign-in is not enabled in your Supabase project yet. Please enable Google in your Supabase Dashboard (Authentication > Providers > Google), or sign in with Email & Password below.'
-            );
+            console.warn('[Continu Auth] Google provider not enabled in Supabase');
+            setError('Google sign-in is currently unavailable. Please sign in with your email and password below.');
             setGoogleLoading(false);
             return;
           }
@@ -129,12 +128,13 @@ export function AuthGate({ children }: AuthGateProps) {
           async (callbackUrl) => {
             if (chrome.runtime.lastError) {
               const lastErr = chrome.runtime.lastError.message || '';
+              console.warn('[Continu Auth] Google sign-in failed:', lastErr, 'Redirect URI:', redirectUri);
               if (lastErr.includes('could not be loaded') || lastErr.includes('Authorization page')) {
-                setError(
-                  `Authorization redirect failed (${lastErr}). Please verify that ${redirectUri} is added to Redirect URLs in your Supabase Dashboard (Authentication > URL Configuration), and Google provider is active.`
-                );
+                setError('Google sign-in could not be loaded. Please try again or sign in with your email below.');
+              } else if (lastErr.includes('canceled') || lastErr.includes('cancelled') || lastErr.includes('closed')) {
+                setError('Google sign-in was canceled.');
               } else {
-                setError(lastErr || 'Google sign-in was canceled.');
+                setError('Google sign-in was interrupted. Please try again.');
               }
               setGoogleLoading(false);
               return;
