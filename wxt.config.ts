@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'Continu - Cross-AI Context & Prompt Manager',
     description: 'Capture, sync, and continue AI conversations across ChatGPT, Claude, Gemini, and more with client-side end-to-end encryption.',
-    version: '0.1.0',
+    version: '0.1.1',
     permissions: ['storage', 'unlimitedStorage', 'activeTab', 'tabs', 'identity'],
     host_permissions: [
       '<all_urls>',
