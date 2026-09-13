@@ -88,7 +88,7 @@ export function AuthGate({ children }: AuthGateProps) {
       const redirectUri =
         typeof chrome !== 'undefined' && chrome.identity?.getRedirectURL
           ? chrome.identity.getRedirectURL()
-          : 'https://fgemdjianelmadaiodolkmbfgeobcjog.chromiumapp.org/';
+          : 'https://bcgfiiknhajpjibmfbmoalndaadmaapk.chromiumapp.org/';
 
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
