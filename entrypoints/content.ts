@@ -41,6 +41,34 @@ export default defineContentScript({
       });
     } catch {}
 
+    // Auto-reload the AI page when user signs in or switches accounts so the full session hydrates cleanly
+    let reloadScheduled = false;
+    try {
+      chrome.storage?.onChanged?.addListener((changes, areaName) => {
+        if (areaName === 'local' && !reloadScheduled) {
+          const authBecameTrue =
+            changes.continu_user_authenticated?.newValue === true &&
+            !changes.continu_user_authenticated?.oldValue;
+          const userBecameSet =
+            !!changes.continu_user_id?.newValue &&
+            !changes.continu_user_id?.oldValue;
+          const userSwitched =
+            !!changes.continu_user_id?.newValue &&
+            !!changes.continu_user_id?.oldValue &&
+            changes.continu_user_id.newValue !== changes.continu_user_id.oldValue;
+
+          if (authBecameTrue || userBecameSet || userSwitched) {
+            reloadScheduled = true;
+            window.setTimeout(() => {
+              try {
+                window.location.reload();
+              } catch {}
+            }, 300);
+          }
+        }
+      });
+    } catch {}
+
     const manager = new AdapterManager();
     // Register single universal AI adapter that dynamically detects and adapts to ANY AI chat app
     manager.register(new UniversalAIAdapter());
