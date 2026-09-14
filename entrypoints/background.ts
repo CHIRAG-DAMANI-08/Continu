@@ -199,13 +199,17 @@ export default defineBackground(() => {
 
 async function checkUserAuthenticated(): Promise<{ authenticated: boolean; userId: string | null }> {
   try {
-    const { isSupabaseConfigured, getSupabaseClient } = await import('../src/database/supabase');
-    if (!isSupabaseConfigured()) {
-      // Fallback for offline/test environments where Supabase credentials are not configured
+    // 1. Direct shared local storage check (populated by popup auth gate & session listener)
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
       const res = await chrome.storage.local.get(['continu_user_authenticated', 'continu_user_id']);
       if (res.continu_user_authenticated && res.continu_user_id) {
         return { authenticated: true, userId: res.continu_user_id };
       }
+    }
+
+    // 2. Check Supabase session if storage markers are not yet populated
+    const { isSupabaseConfigured, getSupabaseClient } = await import('../src/database/supabase');
+    if (!isSupabaseConfigured()) {
       return { authenticated: false, userId: null };
     }
 
@@ -220,11 +224,9 @@ async function checkUserAuthenticated(): Promise<{ authenticated: boolean; userI
         await chrome.storage.local.set({ continu_user_authenticated: false, continu_user_id: null });
         return { authenticated: false, userId: null };
       }
+      await chrome.storage.local.set({ continu_user_authenticated: true, continu_user_id: user.id });
       return { authenticated: true, userId: user.id };
     }
-
-    // Configured Supabase returned no active session: purge stale local markers
-    await chrome.storage.local.set({ continu_user_authenticated: false, continu_user_id: null });
   } catch (err) {
     logger.warn('Continu: Auth check in background failed:', err);
   }

@@ -59,15 +59,6 @@ export class ComposerIcon {
 
   private async isUserAuthenticated(): Promise<boolean> {
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: MessageType.CHECK_AUTH,
-      });
-      if (response && typeof response.authenticated === 'boolean') {
-        return response.authenticated;
-      }
-    } catch {}
-
-    try {
       if (typeof chrome !== 'undefined' && chrome.storage?.local) {
         const res = await chrome.storage.local.get(['continu_user_authenticated', 'continu_user_id']);
         if (res.continu_user_authenticated && res.continu_user_id) {
@@ -76,8 +67,18 @@ export class ComposerIcon {
       }
     } catch {}
 
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: MessageType.CHECK_AUTH,
+      });
+      if (response && response.authenticated === true) {
+        return true;
+      }
+    } catch {}
+
     return false;
   }
+
 
   private async loadContexts(): Promise<ContinuContext[]> {
     if (!this.isAuthenticated) {
