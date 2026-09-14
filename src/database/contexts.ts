@@ -2,6 +2,7 @@ import type { ContinuContext } from '../contexts/model';
 import { sanitizeContext } from '../contexts/validation';
 import { encrypt, decrypt, deriveUserEncryptionKey } from '../security/encryption';
 import { getSupabaseClient } from './supabase';
+import { logger } from '../utils/logger';
 
 /**
  * Save a context to Supabase with end-to-end client-side encryption.
@@ -102,7 +103,7 @@ export async function getContextsRemote(userId: string): Promise<ContinuContext[
         contexts.push(raw as ContinuContext);
       }
     } catch (decryptErr) {
-      console.warn(`Continu: unable to decrypt context ${row.id}`, decryptErr);
+      logger.debug(`Continu: unable to decrypt context ${row.id}`, decryptErr);
     }
   }
 
