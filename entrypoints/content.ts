@@ -7,7 +7,16 @@ import type { AIAdapter } from '../src/adapters/base';
 
 
 export default defineContentScript({
-  matches: ['<all_urls>'],
+  matches: [
+    'https://chatgpt.com/*',
+    'https://chat.openai.com/*',
+    'https://claude.ai/*',
+    'https://gemini.google.com/*',
+    'https://*.perplexity.ai/*',
+    'https://*.deepseek.com/*',
+    'http://localhost/*',
+    'http://127.0.0.1/*',
+  ],
   main() {
     // Proactive safety cleanup: restore any elements accidentally hidden by legacy builds
     try {

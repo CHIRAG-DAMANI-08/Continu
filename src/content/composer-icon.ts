@@ -810,16 +810,12 @@ export class ComposerIcon {
 
     this.boundDragEnter = (e: DragEvent) => {
       if (this.hasContextData(e)) {
-        e.preventDefault();
-        e.stopPropagation();
         this.checkDragTarget(e);
       }
     };
 
     this.boundDragOver = (e: DragEvent) => {
       if (this.hasContextData(e)) {
-        e.preventDefault();
-        e.stopPropagation();
         this.checkDragTarget(e);
       }
     };
@@ -842,18 +838,72 @@ export class ComposerIcon {
 
       if (!wasOver) return;
 
+      e.preventDefault();
+      e.stopPropagation();
+
+      const handleParsedContext = (ctx: ContinuContext) => {
+        if (ctx && ctx.id && ctx.name) {
+          this.armContext(ctx);
+          if (this.isOpen) this.closePanel();
+          try {
+            chrome.storage?.local?.remove('continu_active_drag');
+          } catch {}
+        }
+      };
+
+      // 1. Try custom MIME type (works inside tab / drawer)
       const raw = e.dataTransfer?.getData('application/x-continu-context');
       if (raw) {
         try {
           const ctx = JSON.parse(raw);
-          if (ctx && ctx.id && ctx.name) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.armContext(ctx);
-            if (this.isOpen) this.closePanel();
+          if (ctx?.id) {
+            handleParsedContext(ctx);
+            return;
           }
         } catch (err) {
           logger.warn('Continu: failed to parse dropped context', err);
+        }
+      }
+
+      // 2. Try chrome.storage.local bridge (cross-window drag from popup)
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        chrome.storage.local.get('continu_active_drag', (result) => {
+          if (result?.continu_active_drag?.id) {
+            handleParsedContext(result.continu_active_drag);
+            return;
+          }
+          // 3. Fallback: try text/plain
+          const textRaw = e.dataTransfer?.getData('text/plain');
+          if (textRaw) {
+            try {
+              const parsed = JSON.parse(textRaw);
+              if (parsed?.id) {
+                handleParsedContext(parsed);
+                return;
+              }
+            } catch {}
+            const match = this.contexts.find(c => textRaw.includes(c.name) || textRaw.includes(c.id));
+            if (match) {
+              handleParsedContext(match);
+            }
+          }
+        });
+        return;
+      }
+
+      // 3. Fallback without chrome.storage: try text/plain
+      const textRaw = e.dataTransfer?.getData('text/plain');
+      if (textRaw) {
+        try {
+          const parsed = JSON.parse(textRaw);
+          if (parsed?.id) {
+            handleParsedContext(parsed);
+            return;
+          }
+        } catch {}
+        const match = this.contexts.find(c => textRaw.includes(c.name) || textRaw.includes(c.id));
+        if (match) {
+          handleParsedContext(match);
         }
       }
     };
@@ -876,7 +926,10 @@ export class ComposerIcon {
 
   private hasContextData(e: DragEvent): boolean {
     if (!e.dataTransfer) return false;
-    return e.dataTransfer.types.includes('application/x-continu-context');
+    return (
+      e.dataTransfer.types.includes('application/x-continu-context') ||
+      e.dataTransfer.types.includes('text/plain')
+    );
   }
 
   private isOverChatbox(e: DragEvent): boolean {
@@ -895,6 +948,7 @@ export class ComposerIcon {
   private checkDragTarget(e: DragEvent): void {
     if (this.isOverChatbox(e)) {
       e.preventDefault();
+      e.stopPropagation();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
       this.showDropzone();
     } else {
@@ -1497,17 +1551,21 @@ export class ComposerIcon {
 
       item.addEventListener('dragstart', (e) => {
         if (!e.dataTransfer) return;
-        // Crucial: Only attach application/x-continu-context. Never attach text/plain!
-        // Attaching text/plain triggers native chat web app drop overlays (like ChatGPT's "Drop text here.")
-        // which completely covers and obstructs the user's textbox.
+        // In-page drawer: Attach application/x-continu-context without text/plain to avoid ChatGPT overlay
         e.dataTransfer.setData('application/x-continu-context', JSON.stringify(ctx));
         e.dataTransfer.effectAllowed = 'copy';
         item.classList.add('is-dragging');
+        try {
+          chrome.storage?.local?.set({ continu_active_drag: ctx });
+        } catch {}
       });
 
       item.addEventListener('dragend', () => {
         item.classList.remove('is-dragging');
         this.hideDropzone();
+        try {
+          chrome.storage?.local?.remove('continu_active_drag');
+        } catch {}
       });
 
       const info = document.createElement('div');

@@ -70,8 +70,16 @@ export function ContextList({ onSelect, onGenerate }: ContextListProps) {
           draggable
           onDragStart={(e) => {
             e.dataTransfer.setData('application/x-continu-context', JSON.stringify(context));
-            e.dataTransfer.setData('text/plain', formatPromptWithContext(context, ''));
+            e.dataTransfer.setData('text/plain', JSON.stringify(context));
             e.dataTransfer.effectAllowed = 'copy';
+            try {
+              chrome.storage?.local?.set({ continu_active_drag: context });
+            } catch {}
+          }}
+          onDragEnd={() => {
+            try {
+              chrome.storage?.local?.remove('continu_active_drag');
+            } catch {}
           }}
           onClick={() => onSelect(context)}
         >
